@@ -1,0 +1,31 @@
+{
+  "id": "speech-sherpa",
+  "name": "本地语音（Sherpa-ONNX）",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "requiresMain": true,
+  "capabilities": ["stt", "tts"],
+  "permissions": ["mic", "audio-output"],
+  "description": "本地离线语音：STT 语音输入（VAD + Zipformer 流式识别）+ TTS 朗读（VITS 中文音色）",
+  "modelDeps": [
+    {
+      "name": "STT 模型（Zipformer 中文 int8）",
+      "dest": "models/stt",
+      "sizeMB": 126,
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2"
+    },
+    {
+      "name": "VAD 模型（Silero）",
+      "dest": "models/vad",
+      "sizeMB": 0.6,
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+    },
+    {
+      "name": "TTS 模型（VITS 中文 AISHELL3）",
+      "dest": "models/tts",
+      "sizeMB": 30,
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-icefall-zh-aishell3.tar.bz2"
+    }
+  ]
+}

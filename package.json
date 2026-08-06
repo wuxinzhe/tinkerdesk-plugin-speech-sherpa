@@ -1,0 +1,15 @@
+{
+  "name": "tinkerdesk-plugin-speech-sherpa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TinkerDesk 插件：本地离线语音 STT + TTS（Sherpa-ONNX）",
+  "main": "index.js",
+  "scripts": {
+    "pack": "node scripts/pack.js",
+    "verify": "node scripts/verify.js"
+  },
+  "dependencies": {
+    "node-cpal": "^0.1.1",
+    "sherpa-onnx-node": "^1.13.4"
+  }
+}
