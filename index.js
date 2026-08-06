@@ -72,6 +72,26 @@ module.exports = {
     })
 
     return {
+      /** 启用前自检（协议 v1 强制）：模型就绪检查 */
+      check() {
+        const sttOk = models.isModelReady(ctx.configDir, 'stt')
+        const ttsOk = models.isModelReady(ctx.configDir, 'tts')
+        const checks = [
+          {
+            name: 'STT 模型',
+            ok: sttOk,
+            hint: sttOk ? undefined : '语音输入模型未下载（约 126MB）',
+            action: sttOk ? undefined : 'download-models',
+          },
+          {
+            name: 'TTS 模型',
+            ok: ttsOk,
+            hint: ttsOk ? undefined : '朗读模型未下载（约 30MB）',
+            action: ttsOk ? undefined : 'download-models',
+          },
+        ]
+        return { ok: sttOk && ttsOk, checks }
+      },
       start() {
         ctx.emit('ready', { models: models.allReady(ctx.configDir) })
       },
