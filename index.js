@@ -1,58 +1,41 @@
 /**
- * tinkerdesk-plugin-speech-sherpa/index.js — TinkerDesk 语音插件入口（CommonJS）
+ * index.js — tinkerdesk-plugin-speech-sherpa 入口（CommonJS）
+ *
+ * 职责边界：插件只提供 STT（语音转文本）和 TTS（文本转语音）纯能力。
+ * 录音（麦克风采集）是 TinkerDesk 应用固有功能——应用启动时检测本插件是否可用，
+ * 决定是否显示语音输入按钮；录音完成后把音频交给本插件的 stt:transcribe 转文本。
  *
  * 契约：module.exports = { init(ctx) => PluginApi }
  *
  * 能力：
- *   stt:start            → 开始录音识别（VAD 切句 → 文本事件 stt:on-text）
- *   stt:stop             → 停止录音
- *   stt:status           → 录音状态
- *   tts:speak {text}     → 合成并播放（返回 audio data URL）
- *   models:status        → 模型就绪状态
- *   models:download      → 下载缺失模型（进度事件 models:progress）
+ *   stt:transcribe {samples, sampleRate} → {text}   整段音频转文本
+ *   tts:speak {text} → {audio}                       文本合成语音（data URL）
+ *   models:status → 模型就绪状态
+ *   models:download {kinds} → 下载缺失模型（进度事件 models:progress）
  *
- * 事件：
- *   stt:on-text {text}   识别文本（逐句）
- *   stt:state {running}  录音状态变化
- *   models:progress {kind, phase, percent}
+ * 事件：models:progress {kind, phase, percent}
  */
 const { join } = require('path')
 const models = require('./lib/models')
-const { startStt } = require('./lib/stt')
+const { transcribe } = require('./lib/stt')
 const { synthesize } = require('./lib/tts')
 
 module.exports = {
   init(ctx) {
-    let sttSession = null
-    let running = false
-
-    // ── STT ──
-    ctx.registerIpc('stt:start', () => {
-      if (running) return { running: true }
-      if (!models.isModelReady(ctx.configDir, 'stt') || !models.isModelReady(ctx.configDir, 'vad')) {
+    // ── STT：应用录音完成后调此接口转文本 ──
+    ctx.registerIpc('stt:transcribe', (payload) => {
+      if (!models.isModelReady(ctx.configDir, 'stt')) {
         throw new Error('STT 模型未就绪，请先在插件设置中下载模型')
       }
-      sttSession = startStt({
-        modelDir: join(ctx.configDir, 'models', 'stt'),
-        vadModelDir: join(ctx.configDir, 'models', 'vad'),
-        onText: (text) => ctx.emit('stt:on-text', { text }),
-        onState: (state) => {
-          running = !!state.running
-          ctx.emit('stt:state', state)
-        },
-      })
-      return { running: true }
+      const samples = payload && payload.samples
+      if (!(samples instanceof Float32Array) || samples.length === 0) {
+        throw new Error('stt:transcribe 需要 samples（Float32Array 16kHz）')
+      }
+      const text = transcribe({ modelDir: join(ctx.configDir, 'models', 'stt'), samples })
+      return { text }
     })
 
-    ctx.registerIpc('stt:stop', () => {
-      sttSession?.stop()
-      sttSession = null
-      return { running: false }
-    })
-
-    ctx.registerIpc('stt:status', () => ({ running }))
-
-    // ── TTS ──
+    // ── TTS：文本合成语音（返回 audio data URL，renderer Audio 播放） ──
     ctx.registerIpc('tts:speak', async (payload) => {
       const text = payload && typeof payload.text === 'string' ? payload.text.trim() : ''
       if (!text) throw new Error('tts:speak 需要 text')
@@ -72,7 +55,6 @@ module.exports = {
     // ── 模型管理 ──
     ctx.registerIpc('models:status', () => ({
       stt: models.isModelReady(ctx.configDir, 'stt'),
-      vad: models.isModelReady(ctx.configDir, 'vad'),
       tts: models.isModelReady(ctx.configDir, 'tts'),
       allReady: models.allReady(ctx.configDir),
     }))
@@ -82,7 +64,9 @@ module.exports = {
       const manifest = ctx.getManifest()
       const results = {}
       for (const kind of kinds) {
-        results[kind] = await models.downloadModel(ctx.configDir, kind, manifest, (evt) => ctx.emit('models:progress', evt))
+        results[kind] = await models.downloadModel(ctx.configDir, kind, manifest, (evt) =>
+          ctx.emit('models:progress', evt)
+        )
       }
       return results
     })
@@ -91,20 +75,13 @@ module.exports = {
       start() {
         ctx.emit('ready', { models: models.allReady(ctx.configDir) })
       },
-      stop() {
-        sttSession?.stop()
-        sttSession = null
-        running = false
-      },
-      dispose() {
-        sttSession?.stop()
-        sttSession = null
-      },
+      stop() {},
+      dispose() {},
       getStatus() {
         return {
           loaded: true,
           enabled: true,
-          detail: `模型 ${models.allReady(ctx.configDir) ? '已就绪' : '未下载（' + ['stt', 'vad', 'tts'].filter((k) => !models.isModelReady(ctx.configDir, k)).join('/') + '）'}`,
+          detail: `模型 ${models.allReady(ctx.configDir) ? '已就绪' : '未下载（' + ['stt', 'tts'].filter((k) => !models.isModelReady(ctx.configDir, k)).join('/') + '）'}`,
         }
       },
       getConfigSchema() {
